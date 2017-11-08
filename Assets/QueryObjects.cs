@@ -21,6 +21,8 @@ public abstract class Q_OBJECT
         if (type == "Q_HELLO") { return JsonUtility.FromJson<Q_HELLO>(json); }
         if (type == "Q_JOIN_REQUEST") { return JsonUtility.FromJson<Q_JOIN_REQUEST>(json); }
         if (type == "Q_JOIN_OK") { return JsonUtility.FromJson<Q_JOIN_OK>(json); }
+        if (type == "Q_IM_ALIVE") { return JsonUtility.FromJson<Q_IM_ALIVE>(json); }
+        if (type == "Q_IM_ALIVE_RESPONSE") { return JsonUtility.FromJson<Q_IM_ALIVE_RESPONSE>(json); }
 
         //na wypadek błędu
         Debug.Log("Q_OBJECT ERROR, Nieznany typ "+type.ToString());
@@ -28,7 +30,6 @@ public abstract class Q_OBJECT
         throw new Exception("Q_OBJECT ERROR, Nieznany typ "+type.ToString());
     }
 }
-
 [Serializable]
 public class Q_SERVER_INFO_REQUEST : Q_OBJECT   //obiekt oznaczający, że ktoś chce się dowiedzieć coś o serwerze
 {
@@ -110,12 +111,22 @@ public class Q_JOIN_OK : Q_OBJECT   //obiekt oznaczający fakt dołączenia do g
         }
     }
 }
-
 [Serializable]
 public class Q_IM_ALIVE : Q_OBJECT   //obiekt oznaczający że komputer nie umarł
 {
     public override void executeQuery(QueuePack queuePack)
     {
-        
+        Debug.Log("Q_IM_ALIVE done.");
+        NetworkManager.instance.setComputerTimeZero(queuePack.endpoint);
+        NetworkManager.instance.sendToComputer(new Q_IM_ALIVE_RESPONSE(), queuePack.endpoint);
+    }
+}
+[Serializable]
+public class Q_IM_ALIVE_RESPONSE : Q_OBJECT   //obiekt oznaczający że komputer nie umarł
+{
+    public override void executeQuery(QueuePack queuePack)
+    {
+        Debug.Log("Q_IM_ALIVE_RESPONSE done.");
+        NetworkManager.instance.setServerTimeZero();
     }
 }

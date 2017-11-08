@@ -78,6 +78,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Assets\Console.cs" />
     <Compile Include="Assets\NetworkManager.cs" />
     <Compile Include="Assets\QueryObjects.cs" />
     <Compile Include="Assets\Test.cs" />

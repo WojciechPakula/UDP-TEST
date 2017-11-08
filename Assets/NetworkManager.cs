@@ -36,6 +36,7 @@ public class Computer
 {
     public IPEndPoint ip;
     public int state = 0;
+    public float offlineTime = 0;
 }
 
 public class QueuePack
@@ -73,12 +74,14 @@ public class NetworkManager {
 
     private const int joinTimeout = 4000;
     private const int receiverTimeout = 100;
+    private const int aliveTimeout = 1000;
 
     private NetworkState networkState;
     private UdpClient listener = null;
     private Socket s = null;       
     private Thread receiver = null;
     private Thread joiner = null;
+    private Thread connector = null;
 
     private Queue<QueuePack> sendQueue = null;
     private Queue<QueuePack> receiveQueue = null;
@@ -87,6 +90,7 @@ public class NetworkManager {
     private List<Computer> computers = null;
 
     private IPEndPoint serverIp = null;
+    private float serverOfflineTime = 0;
     private IPEndPoint myIp = null;
 
     private bool disableTrigger = false;
@@ -219,7 +223,7 @@ public class NetworkManager {
         queue.endpoint = serverIp;
         sendQueue.Enqueue(queue);
     }
-    //Wysyła obiekt do serwera, jeżeli serwer to tysyła to wyśle sam do siebie.
+    //Wysyła obiekt do serwera, jeżeli serwer to wysyła to wyśle sam do siebie.
     public void sendToServer(object o)
     {
         if (networkState == NetworkState.NET_DISABLED || networkState == NetworkState.NET_ENABLED) return;
@@ -259,12 +263,24 @@ public class NetworkManager {
     {
         return joinSemaphore;
     }
+    //zmienia stan sieci na kliencki
     public void acceptJoin(IPEndPoint ip)
     {
         setStateClient(ip);
         if (joiner != null) joiner.Abort();
         joinSemaphore = null;
         joiner = null;
+
+        connector = new Thread(() => AliveThread());
+        connector.Start();
+    }
+    private void AliveThread()
+    {
+        while (getNetworkState() == NetworkState.NET_CLIENT)
+        {/////////////////////////////////////
+            Thread.Sleep(aliveTimeout);
+            sendToServer(new Q_IM_ALIVE());
+        }   
     }
     public void enableNetwork()
     {
@@ -310,10 +326,11 @@ public class NetworkManager {
             if (listener != null) listener.Close();
         }
     }
-    public void setLockMode()   //server nie odbiera wiadomości od obcych komputerów (start gry)
+    //server nie odbiera wiadomości od obcych komputerów (start gry)
+    public void setLockMode()
     {
         lockMode = true;
-    }
+    }    
     public void kill()
     {
         stopReceiver();
@@ -322,8 +339,32 @@ public class NetworkManager {
     {
         return networkState;
     }
+    public void setComputerTimeZero(IPEndPoint ip)
+    {
+        if (networkState != NetworkState.NET_SERVER) return;
+        foreach (Computer comp in computers)
+        {
+            if (comp.ip == ip) comp.offlineTime = 0;
+        }
+    }
+    public void setServerTimeZero()
+    {
+        if (networkState != NetworkState.NET_CLIENT) return;
+        serverOfflineTime = 0;
+    }
     public void update()
     {
+        if (networkState == NetworkState.NET_SERVER)
+        {
+            foreach (Computer comp in computers)
+            {
+                comp.offlineTime += Time.deltaTime;
+            }
+        }
+        if (networkState == NetworkState.NET_CLIENT)
+        {
+            serverOfflineTime += Time.deltaTime;
+        }        
         if (disableTrigger == true)
         {
             Debug.Log("Nieoczekiwany błąd. Sieć wyłączona.");
@@ -419,6 +460,7 @@ public class NetworkManager {
     }
     private void setStateDisabled()
     {
+        serverOfflineTime = 0;
         lockMode = false;
         port = connectionPort;
         myIp = new IPEndPoint(getMyIp(), port);
@@ -429,24 +471,6 @@ public class NetworkManager {
         computers = null;
         serverIp = null;
         stopReceiver();
-        /*switch (networkState)
-        {
-            case NetworkState.NET_SERVER:
-                {
-                    networkState = NetworkState.NET_DISABLED;
-                    break;
-                }
-            case NetworkState.NET_CLIENT:
-                {
-                    networkState = NetworkState.NET_DISABLED;
-                    break;
-                }
-            case NetworkState.NET_ENABLED:
-                {
-                    networkState = NetworkState.NET_ENABLED;
-                    break;
-                }
-        }*/
         networkState = NetworkState.NET_DISABLED;
     }
 
@@ -530,7 +554,8 @@ public class NetworkManager {
 
     private void processQueueMessage(QueuePack queuePack)
     {
-        if (networkState == NetworkState.NET_CLIENT && queuePack.endpoint != serverIp) return;
+        
+        if (networkState == NetworkState.NET_CLIENT && !IPEndPoint.Equals(queuePack.endpoint, serverIp)) return;
         if (networkState == NetworkState.NET_SERVER && lockMode && !isKnownComputer(queuePack.endpoint)) return;
         switch (queuePack.qp.sendMode) {
             case SendMode.SM_BROADCAST:

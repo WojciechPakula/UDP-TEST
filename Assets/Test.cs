@@ -7,10 +7,20 @@ public class Test : MonoBehaviour {
     public IPEndPoint ip = null;
     // Use this for initialization
     void Start () {
+        Application.runInBackground = true;
+        Debug.Log("R - run server");
+        Debug.Log("E - enable network");
+        Debug.Log("B - find server");
+        Debug.Log("C - connect to server");
+        Debug.Log("H - send hello");
+        Debug.Log("scenariusz");
+        Debug.Log("Uruchom okienko i wcisnij R");
+        Debug.Log("W drugim okienku wciśnij - E, B, C, H");
+        Debug.Log("Komunikat hello powinien się pojawić w oknie serwera");
     }
-	
-	// Update is called once per frame
-	void Update () {
+
+    // Update is called once per frame
+    void Update () {
         //dwie metody które muszą być regularnie wywoływane
         NetworkManager.instance.update();
         if (Input.GetKeyDown(KeyCode.R))
