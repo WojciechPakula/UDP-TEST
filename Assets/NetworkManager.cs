@@ -74,7 +74,7 @@ public class NetworkManager {
 
     private const int joinTimeout = 4000;
     private const int receiverTimeout = 100;
-    private const int aliveTimeout = 1000;
+    private const int aliveTimeout = 5000;
 
     private NetworkState networkState;
     private UdpClient listener = null;
@@ -116,6 +116,7 @@ public class NetworkManager {
         QueryPack qp = new QueryPack();
         qp.json = json;
         qp.type = o.GetType().FullName;
+        qp.port = port;
         qp.sendMode = SendMode.SM_BROADCAST;
         QueuePack queue = new QueuePack();
         queue.qp = qp;
@@ -179,6 +180,7 @@ public class NetworkManager {
     //Wysyła obiekt do komputera na którym gra gracz o danym id, nawet jeżeli to komputer z którego wysłano obiekt.
     public void sendToPlayer(object o, int playerId)
     {
+        throw new NotImplementedException();
         if (networkState == NetworkState.NET_DISABLED || networkState == NetworkState.NET_ENABLED) return;
         string json = JsonUtility.ToJson(o);
         QueryPack qp = new QueryPack();
@@ -188,8 +190,7 @@ public class NetworkManager {
         qp.port = port;
         qp.sendMode = SendMode.SM_PLAYER;
         QueuePack queue = new QueuePack();
-        queue.qp = qp;
-        //throw new NotImplementedException();
+        queue.qp = qp;        
         switch (networkState) {
             case NetworkState.NET_CLIENT:
                 queue.endpoint = serverIp;
@@ -554,8 +555,8 @@ public class NetworkManager {
 
     private void processQueueMessage(QueuePack queuePack)
     {
-        
-        if (networkState == NetworkState.NET_CLIENT && !IPEndPoint.Equals(queuePack.endpoint, serverIp)) return;
+        bool wtf = !IPEndPoint.Equals(queuePack.endpoint, serverIp);
+        if (networkState == NetworkState.NET_CLIENT && wtf) return;
         if (networkState == NetworkState.NET_SERVER && lockMode && !isKnownComputer(queuePack.endpoint)) return;
         switch (queuePack.qp.sendMode) {
             case SendMode.SM_BROADCAST:
@@ -572,6 +573,7 @@ public class NetworkManager {
                         QueuePack tmp2 = new QueuePack();
                         tmp2.endpoint = computer.ip;
                         tmp2.qp = queuePack.qp;
+                        tmp2.qp.port = serverIp.Port;
                         sendQueue.Enqueue(tmp2);
                     }
                 }

@@ -42,7 +42,7 @@ public class Q_SERVER_INFO_REQUEST : Q_OBJECT   //obiekt oznaczający, że ktoś
             info.numberOfPlayers = 0;
             info.serverName = "test komunikatu";
             NetworkManager.instance.sendToComputer(info, queuePack.endpoint);
-        }       
+        }
     }
 }
 [Serializable]
