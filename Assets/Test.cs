@@ -21,8 +21,8 @@ public class Test : MonoBehaviour {
 
     // Update is called once per frame
     void Update () {
-        //dwie metody które muszą być regularnie wywoływane
         NetworkManager.instance.update();
+
         if (Input.GetKeyDown(KeyCode.R))
         {
             Debug.Log("R");

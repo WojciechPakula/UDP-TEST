@@ -29,7 +29,9 @@ public enum NetworkState
 public class PlayerInfo
 {
     public int id = 0;
-    public IPEndPoint ip; 
+    public string name = "";
+    public bool isAi = false;
+    public IPEndPoint ip;
 }
 
 public class Computer
@@ -51,7 +53,7 @@ public class QueryPack
     public string type = "";
     public SendMode sendMode = SendMode.SM_ALL_IN_NETWORK;
     public int port = 11001;
-    public int targetPlayerId = 0; 
+    public int targetPlayerId = 0;
     public string json = "";
 
     public static string getJson(QueryPack q)
@@ -65,10 +67,11 @@ public class QueryPack
     }
 }
 
-public class NetworkManager {
+public class NetworkManager
+{
     public static NetworkManager instance = new NetworkManager();   //instancja
     public int broadcastPort = 11000;   //port na którym musi chodzić serwer i na który będą wysyłane wiadomości broadcast.
-    public int connectionPort = 11000;  //port na którym chodzi klient, serwer pamięta port przez który może się komunikować z klientem.
+    public int connectionPort = 11001;  //port na którym chodzi klient, serwer pamięta port przez który może się komunikować z klientem.
     public int port = 11000;
     public bool lockMode = false;   //tryb blokowania wiadomości z poza podłączonyh komputerów (tylko dla serwera)
 
@@ -78,7 +81,7 @@ public class NetworkManager {
 
     private NetworkState networkState;
     private UdpClient listener = null;
-    private Socket s = null;       
+    private Socket s = null;
     private Thread receiver = null;
     private Thread joiner = null;
     private Thread connector = null;
@@ -86,8 +89,8 @@ public class NetworkManager {
     private Queue<QueuePack> sendQueue = null;
     private Queue<QueuePack> receiveQueue = null;
 
-    private List<PlayerInfo> players = null;
-    private List<Computer> computers = null;
+    public List<PlayerInfo> players = null;
+    public List<Computer> computers = null;
 
     private IPEndPoint serverIp = null;
     private float serverOfflineTime = 0;
@@ -99,8 +102,11 @@ public class NetworkManager {
 
     private IPEndPoint joinSemaphore = null;
 
+    private static int idCounter = 0;
+
     // Use this for initialization
-    NetworkManager() {
+    NetworkManager()
+    {
         networkState = NetworkState.NET_DISABLED;
         //socket init
         s = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
@@ -108,7 +114,60 @@ public class NetworkManager {
         s.MulticastLoopback = false;
         myIp = new IPEndPoint(getMyIp(), port);
     }
-  
+
+    public void kickComputer(IPEndPoint ip)
+    {
+        if (networkState == NetworkState.NET_SERVER)
+        {
+            for (int i = 0; i < computers.Count; ++i)
+            {
+                bool access = IPEndPoint.Equals(computers[i].ip, ip);
+                if (access)
+                {
+                    computers.RemoveAt(i);
+                    for (int j = 0; j < players.Count; ++j)
+                    {
+                        bool access2 = IPEndPoint.Equals(players[j].ip, ip);
+                        if (access2)
+                        {
+                            players.RemoveAt(j);
+                            --j;
+                        }
+                    }
+                    --i;
+                    break;
+                }
+            }
+        }
+    }
+
+    public void addPlayer(string name, IPEndPoint ip, bool isAi)
+    {
+        PlayerInfo pi = new PlayerInfo();
+        pi.name = name;
+        pi.id = idCounter++;
+        pi.ip = ip;
+        pi.isAi = isAi;
+        players.Add(pi);
+    }
+
+    public void removePlayer(string name, IPEndPoint ip)
+    {
+        bool highPriority = IPEndPoint.Equals(ip, myIp);
+        for (int i = 0; i < players.Count; ++i)
+        {
+            bool access = IPEndPoint.Equals(players[i].ip, ip);
+            if (access || highPriority)
+            {
+                if (players[i].name == name)
+                {
+                    players.RemoveAt(i);
+                    break;
+                }
+            }
+        }
+    }
+
     //Wysyła obiekt do wszystkich urządzeń w domenie rozgłoszeniowej, nawet do samego siebie
     public void sendBroadcast(object o)
     {
@@ -144,7 +203,7 @@ public class NetworkManager {
                     foreach (Computer comp in computers)
                     {
                         IPEndPoint ip = comp.ip;
-                        if (ip == myIp) continue;
+                        if (IPEndPoint.Equals(ip, myIp)) continue;
                         QueuePack tmp = new QueuePack();
                         tmp.endpoint = ip;
                         tmp.qp = queue.qp;
@@ -161,7 +220,7 @@ public class NetworkManager {
             default:
                 sendQueue.Enqueue(queue);
                 break;
-        }       
+        }
     }
     //Wysyła obiekt do komputera o podanym ip
     public void sendToComputer(object o, IPEndPoint ip)
@@ -190,8 +249,9 @@ public class NetworkManager {
         qp.port = port;
         qp.sendMode = SendMode.SM_PLAYER;
         QueuePack queue = new QueuePack();
-        queue.qp = qp;        
-        switch (networkState) {
+        queue.qp = qp;
+        switch (networkState)
+        {
             case NetworkState.NET_CLIENT:
                 queue.endpoint = serverIp;
                 sendQueue.Enqueue(queue);
@@ -207,7 +267,7 @@ public class NetworkManager {
                     }
                 }
                 break;
-        }              
+        }
     }
     //Wysyła obiekt do serwera i serwer wysyła go do wszystkich komputerów łącznie z serwerem. Służy to głównie do traktowania gry jakby była na jakiejś chmurze (czyli model w którym użytkownik nie jest przypisany do stanowiska).
     public void sendToServerToAll(object o)
@@ -245,11 +305,14 @@ public class NetworkManager {
     }
     public void connectToSerwer(IPEndPoint ip)
     {
-        setStateEnabled();
-        instance.sendToComputer(new Q_JOIN_REQUEST(), ip);
-        joinSemaphore = ip;
-        joiner = new Thread(() => JoinThread());
-        joiner.Start();
+        //setStateEnabled();
+        if (this.getNetworkState() != NetworkState.NET_DISABLED)
+        {
+            joinSemaphore = ip;
+            joiner = new Thread(() => JoinThread());
+            joiner.Start();
+            instance.sendToComputer(new Q_JOIN_REQUEST(), ip);
+        }
     }
     private void JoinThread()
     {
@@ -281,11 +344,15 @@ public class NetworkManager {
         {/////////////////////////////////////
             Thread.Sleep(aliveTimeout);
             sendToServer(new Q_IM_ALIVE());
-        }   
+        }
     }
     public void enableNetwork()
     {
         setStateEnabled();
+    }
+    public void disableNetwork()
+    {
+        setStateDisabled();
     }
     public bool isKnownComputer(IPEndPoint ip)
     {
@@ -312,7 +379,8 @@ public class NetworkManager {
             {
                 if (IPEndPoint.Equals(c.ip, ip)) fail = true;
             }
-            if (!fail) {
+            if (!fail)
+            {
                 computers.Add(new Computer() { ip = ip });
                 return true;
             }
@@ -331,11 +399,11 @@ public class NetworkManager {
     public void setLockMode()
     {
         lockMode = true;
-    }    
+    }
     public void kill()
     {
         stopReceiver();
-    }    
+    }
     public NetworkState getNetworkState()
     {
         return networkState;
@@ -365,20 +433,21 @@ public class NetworkManager {
         if (networkState == NetworkState.NET_CLIENT)
         {
             serverOfflineTime += Time.deltaTime;
-        }        
+        }
         if (disableTrigger == true)
         {
             Debug.Log("Nieoczekiwany błąd. Sieć wyłączona.");
             disableTrigger = false;
             setStateDisabled();
         }
-        if (listenerErrorTrigger==true)
+        if (listenerErrorTrigger == true)
         {
             listenerErrorTrigger = false;
-            Debug.Log("Błąd podczas tworzenia nasłuchiwania na porcie "+ port + ". Możliwe, że jest z jakiegoś powodu zajęty. Próbuje naprawić problem.");
+            Debug.Log("Błąd podczas tworzenia nasłuchiwania na porcie " + port + ". Możliwe, że jest z jakiegoś powodu zajęty. Próbuje naprawić problem.");
             if (networkState == NetworkState.NET_SERVER)
             {
-                setStateDisabled();
+                //setStateDisabled();
+                setStateEnabled();
                 Debug.Log("Nie można naprawić problemu dla serwera. Port jest blokowany przez inną aplikację.");
             }
             if (networkState == NetworkState.NET_ENABLED || networkState == NetworkState.NET_CLIENT)
@@ -393,7 +462,7 @@ public class NetworkManager {
     }
     private void sendAllQueriesInQueue()
     {
-        if (networkState != NetworkState.NET_DISABLED && sendQueue!= null)
+        if (networkState != NetworkState.NET_DISABLED && sendQueue != null)
         {
             for (; sendQueue.Count > 0;)
             {
@@ -401,7 +470,7 @@ public class NetworkManager {
                 string json = QueryPack.getJson(queue.qp);
                 sendObject(json, queue.endpoint);
             }
-        }        
+        }
     }
     private void executeAllQueriesInQueue()
     {
@@ -415,7 +484,7 @@ public class NetworkManager {
             }
         }
     }
-    private IPAddress getMyIp()
+    public IPAddress getMyIp()
     {
         IPAddress[] localIPs = Dns.GetHostAddresses(Dns.GetHostName());
         IPAddress ipAddress = null;
@@ -425,7 +494,7 @@ public class NetworkManager {
                 ipAddress = a;
         }
         return ipAddress;
-    }    
+    }
     private void sendObject(string json, IPEndPoint ip)
     {
         byte[] sendbuf = Encoding.UTF8.GetBytes(json);
@@ -442,18 +511,19 @@ public class NetworkManager {
         networkState = NetworkState.NET_SERVER;
         players = new List<PlayerInfo>();
         computers = new List<Computer>();
+        addComputer(myIp);
         serverIp = new IPEndPoint(getMyIp(), broadcastPort);
     }
     private void setStateClient(IPEndPoint serverIp)
     {
-        setStateDisabled();        
+        setStateDisabled();
         runReceiver();
         if (networkState == NetworkState.NET_CLIENT) return;
         networkState = NetworkState.NET_CLIENT;
         this.serverIp = serverIp;
     }
     private void setStateEnabled()
-    {        
+    {
         setStateDisabled();
         runReceiver();
         if (networkState == NetworkState.NET_ENABLED) return;
@@ -476,13 +546,13 @@ public class NetworkManager {
     }
 
     private void runReceiver()
-    {        
+    {
         if (receiver == null)
         {
             sendQueue = new Queue<QueuePack>();
             receiveQueue = new Queue<QueuePack>();
             receiver = new Thread(() => ReceiverThread(Thread.CurrentThread, listenerCounter++));
-            receiver.Start();            
+            receiver.Start();
         }
     }
 
@@ -498,11 +568,11 @@ public class NetworkManager {
 
     private void ReceiverThread(Thread main, int id = 0)
     {
-        Debug.Log("id:"+id+" NetworkManager - ReceiverThread Start");
+        //Debug.Log("id:"+id+" NetworkManager - ReceiverThread Start");
         try
         {
             bool done = false;
-            
+
             IPEndPoint groupEP = new IPEndPoint(IPAddress.Any, port);
             listener = new UdpClient(port);
             listener.Client.ReceiveTimeout = receiverTimeout;
@@ -535,21 +605,21 @@ public class NetworkManager {
         }
         catch (ThreadAbortException e)
         {
-            Debug.Log("id:" + id + " Abort");        
+            //Debug.Log("id:" + id + " Abort");        
         }
         catch (SocketException e)
         {
             Debug.Log("id:" + id + " Port error");
-            listenerErrorTrigger = true;         
+            listenerErrorTrigger = true;
         }
         catch (Exception e)
         {
             Debug.Log("id:" + id + " Blad");
-            disableTrigger = true;         
+            disableTrigger = true;
         }
         finally
         {
-            Debug.Log("id:" + id + " NetworkManager - ReceiverThread Stop");
+            //Debug.Log("id:" + id + " NetworkManager - ReceiverThread Stop");
         }
     }
 
@@ -558,9 +628,11 @@ public class NetworkManager {
         bool wtf = !IPEndPoint.Equals(queuePack.endpoint, serverIp);
         if (networkState == NetworkState.NET_CLIENT && wtf) return;
         if (networkState == NetworkState.NET_SERVER && lockMode && !isKnownComputer(queuePack.endpoint)) return;
-        switch (queuePack.qp.sendMode) {
+        switch (queuePack.qp.sendMode)
+        {
             case SendMode.SM_BROADCAST:
-                receiveQueue.Enqueue(queuePack);                
+                if (!IPEndPoint.Equals(queuePack.endpoint, myIp))
+                    receiveQueue.Enqueue(queuePack);
                 break;
             case SendMode.SM_ALL_IN_NETWORK:
                 receiveQueue.Enqueue(queuePack);
@@ -590,12 +662,13 @@ public class NetworkManager {
                             break;
                         }
                     }
-                } else
-                {                    
+                }
+                else
+                {
                     receiveQueue.Enqueue(queuePack);
                 }
                 break;
-            case SendMode.SM_TO_SERVER_TO_ALL:               
+            case SendMode.SM_TO_SERVER_TO_ALL:
                 foreach (Computer comp in computers)
                 {
                     IPEndPoint ip = comp.ip;
@@ -605,7 +678,7 @@ public class NetworkManager {
                     queue.qp = tmp;
                     queue.endpoint = ip;
                     sendQueue.Enqueue(queue);
-                }                
+                }
                 break;
             case SendMode.SM_TO_SERVER:
                 receiveQueue.Enqueue(queuePack);

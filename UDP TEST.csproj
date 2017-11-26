@@ -82,8 +82,6 @@
     <Compile Include="Assets\NetworkManager.cs" />
     <Compile Include="Assets\QueryObjects.cs" />
     <Compile Include="Assets\Test.cs" />
-    <Compile Include="Assets\UDPclient.cs" />
-    <Compile Include="Assets\UDPhost.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="GenerateTargetFrameworkMonikerAttribute" />
